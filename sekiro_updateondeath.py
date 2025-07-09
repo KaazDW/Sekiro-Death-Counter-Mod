@@ -8,6 +8,13 @@ import ctypes
 from PIL import ImageGrab, Image
 from time import sleep, time
 
+# Add PyQt5 for overlay display
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QFont
+import sys
+import threading
+
 # plays a sound, set to false to disable
 PLAYSOUND = True
 
@@ -70,8 +77,54 @@ def capture_screen(crop_box):
         print(f"Erreur lors de la capture d'écran: {e}")
         return None
 
+# Overlay w/PyQt5
+class DeathCounterOverlay(QWidget):
+    def __init__(self, filename="deaths.txt"):
+        super().__init__()
+        self.filename = filename
+        self.setWindowFlags(
+            Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.label = QLabel(self)
+        self.label.setFont(QFont("Arial", 16, QFont.Bold))
+        self.label.setStyleSheet("color: white; background: rgba(0,0,0,128); padding: 10px; border-radius: 10px;")
+        self.update_count()
+        self.resize(self.label.sizeHint())
+        self.move_to_bottom_right()
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_count)
+        self.timer.start(500)
+
+    def update_count(self):
+        try:
+            with open(self.filename, "r") as f:
+                count = int(f.read())
+        except Exception:
+            count = 0
+        self.label.setText(f"{count}")
+        self.resize(self.label.sizeHint())
+        self.move_to_bottom_right()
+
+    def move_to_bottom_right(self):
+        screen = QApplication.primaryScreen().geometry()
+        x = screen.width() - self.width() - 30
+        y = screen.height() - self.height() - 30
+        self.move(x, y)
+
+def start_overlay():
+    app = QApplication(sys.argv)
+    overlay = DeathCounterOverlay()
+    overlay.show()
+    app.exec_()
+
 def main():
     """Main loop: prepares reference, counts deaths, and updates the file and sound."""
+    # Exe PyQt5 overlay in a separated thread
+    overlay_thread = threading.Thread(target=start_overlay, daemon=True)
+    overlay_thread.start()
+
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     h, w = get_screen_scaling()
     crop_box = get_crop_box(h, w)
@@ -107,7 +160,7 @@ def main():
         except Exception as e:
             print(f"Erreur lors du traitement d'image: {e}")
 
-        sleep(0.005)
+        sleep(0.5)
 
 if __name__ == "__main__":
     main()
